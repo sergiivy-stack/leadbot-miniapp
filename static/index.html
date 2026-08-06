@@ -1,0 +1,391 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Настройки — города</title>
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<style>
+  :root {
+    --bg: var(--tg-theme-bg-color, #ffffff);
+    --secondary-bg: var(--tg-theme-secondary-bg-color, #f4f4f5);
+    --text: var(--tg-theme-text-color, #1c1c1e);
+    --hint: var(--tg-theme-hint-color, #8e8e93);
+    --link: var(--tg-theme-link-color, #2481cc);
+    --button: var(--tg-theme-button-color, #2481cc);
+    --button-text: var(--tg-theme-button-text-color, #ffffff);
+    --section-bg: var(--tg-theme-section-bg-color, #ffffff);
+    --border: color-mix(in srgb, var(--hint) 25%, transparent);
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  body {
+    margin: 0;
+    background: var(--secondary-bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    font-size: 16px;
+    line-height: 1.4;
+    padding-bottom: 90px;
+  }
+  header {
+    padding: 20px 16px 14px;
+  }
+  header h1 {
+    margin: 0;
+    font-size: 28px;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+  }
+  .status-line {
+    margin-top: 6px;
+    font-size: 14px;
+    color: var(--hint);
+  }
+  .status-line strong { color: var(--link); font-weight: 600; }
+
+  .card {
+    background: var(--section-bg);
+    border-radius: 12px;
+    margin: 0 12px 12px;
+    overflow: hidden;
+  }
+
+  .search-wrap { padding: 10px 12px; }
+  .search-box {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: var(--secondary-bg);
+    border-radius: 10px;
+    padding: 9px 12px;
+  }
+  .search-box svg { flex-shrink: 0; opacity: 0.5; }
+  .search-box input {
+    border: none;
+    background: none;
+    outline: none;
+    color: var(--text);
+    font-size: 16px;
+    width: 100%;
+    font-family: inherit;
+  }
+  .search-box input::placeholder { color: var(--hint); }
+  .search-clear {
+    border: none; background: none; color: var(--hint);
+    font-size: 18px; padding: 0 2px; cursor: pointer; display: none;
+  }
+
+  .quick-actions {
+    display: flex; gap: 8px; padding: 0 12px 12px;
+  }
+  .quick-btn {
+    flex: 1;
+    border: 1px solid var(--border);
+    background: none;
+    color: var(--link);
+    font-size: 13px;
+    font-weight: 500;
+    padding: 8px 6px;
+    border-radius: 8px;
+    font-family: inherit;
+  }
+
+  .row {
+    display: flex;
+    align-items: center;
+    padding: 11px 14px;
+    border-top: 1px solid var(--border);
+    cursor: pointer;
+    user-select: none;
+  }
+  .card > .row:first-child, .card > .search-wrap + .quick-actions + .row { border-top: none; }
+  .row.district { padding-left: 40px; }
+  .row.district::before {
+    content: "";
+    position: absolute;
+  }
+
+  .checkbox {
+    width: 22px; height: 22px; border-radius: 6px;
+    border: 2px solid var(--hint);
+    margin-right: 12px;
+    flex-shrink: 0;
+    display: flex; align-items: center; justify-content: center;
+    transition: background 0.12s, border-color 0.12s;
+  }
+  .checkbox.checked {
+    background: var(--link);
+    border-color: var(--link);
+  }
+  .checkbox.checked svg { display: block; }
+  .checkbox svg { display: none; width: 13px; height: 13px; }
+
+  .row-label { flex: 1; font-size: 16px; min-width: 0; }
+  .row-count {
+    font-size: 13px; color: var(--hint); margin-right: 6px; flex-shrink: 0;
+  }
+
+  .expand-arrow {
+    width: 28px; height: 28px;
+    display: flex; align-items: center; justify-content: center;
+    color: var(--hint);
+    flex-shrink: 0;
+    transition: transform 0.18s ease;
+  }
+  .expand-arrow.open { transform: rotate(90deg); }
+  .expand-arrow svg { pointer-events: none; }
+
+  .districts-wrap {
+    max-height: 0;
+    overflow: hidden;
+    transition: max-height 0.22s ease;
+  }
+  .districts-wrap.open { max-height: 2000px; }
+
+  .empty-state {
+    padding: 40px 20px;
+    text-align: center;
+    color: var(--hint);
+    font-size: 15px;
+  }
+
+  .sticky-footer {
+    position: fixed;
+    left: 0; right: 0; bottom: 0;
+    padding: 10px 12px calc(10px + env(safe-area-inset-bottom));
+    background: var(--bg);
+    border-top: 1px solid var(--border);
+  }
+  .save-btn {
+    width: 100%;
+    background: var(--button);
+    color: var(--button-text);
+    border: none;
+    border-radius: 10px;
+    padding: 13px;
+    font-size: 16px;
+    font-weight: 600;
+    font-family: inherit;
+  }
+  .save-btn:active { opacity: 0.8; }
+  .save-btn[disabled] { opacity: 0.5; }
+
+  .loading {
+    padding: 60px 20px;
+    text-align: center;
+    color: var(--hint);
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Города и районы</h1>
+  <div class="status-line" id="statusLine">Загрузка…</div>
+</header>
+
+<div class="card">
+  <div class="search-wrap">
+    <div class="search-box">
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><circle cx="7" cy="7" r="5.5" stroke="currentColor" stroke-width="1.5"/><path d="M11 11L14.5 14.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+      <input type="text" id="searchInput" placeholder="Поиск по городам и районам…">
+      <button class="search-clear" id="searchClear">✕</button>
+    </div>
+  </div>
+  <div class="quick-actions">
+    <button class="quick-btn" id="enableAllBtn">Включить всё</button>
+    <button class="quick-btn" id="disableAllBtn">Выключить всё</button>
+  </div>
+  <div id="listContainer"><div class="loading">Загрузка списка городов…</div></div>
+</div>
+
+<div class="sticky-footer">
+  <button class="save-btn" id="saveBtn" disabled>Сохранить</button>
+</div>
+
+<script>
+const tg = window.Telegram && window.Telegram.WebApp;
+if (tg) { tg.ready(); tg.expand(); }
+
+const API_BASE = ""; // тот же сервер, что отдал эту страницу
+
+let LOCATIONS = [];      // [{name, districts:[...]}]
+let disabled = new Set(); // выключенные названия (город или район)
+let dirty = false;
+
+function isEnabled(name) { return !disabled.has(name); }
+
+function setDirty(v) {
+  dirty = v;
+  const btn = document.getElementById('saveBtn');
+  btn.disabled = !v;
+  btn.textContent = v ? 'Сохранить изменения' : 'Сохранено';
+}
+
+function updateStatusLine() {
+  let totalOn = 0, total = 0;
+  for (const city of LOCATIONS) {
+    total++; if (isEnabled(city.name)) totalOn++;
+    for (const d of city.districts) { total++; if (isEnabled(d)) totalOn++; }
+  }
+  document.getElementById('statusLine').innerHTML =
+    `Включено мест: <strong>${totalOn}</strong> из ${total}`;
+}
+
+function checkmarkSvg() {
+  return '<svg viewBox="0 0 13 13" fill="none"><path d="M2 6.5L5 9.5L11 3" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+}
+function chevronSvg() {
+  return '<svg width="9" height="14" viewBox="0 0 9 14" fill="none"><path d="M1.5 1L7.5 7L1.5 13" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+}
+
+function toggle(name) {
+  if (disabled.has(name)) disabled.delete(name); else disabled.add(name);
+  setDirty(true);
+  updateStatusLine();
+}
+
+function render(filterText) {
+  const container = document.getElementById('listContainer');
+  const q = (filterText || '').trim().toLowerCase();
+  container.innerHTML = '';
+
+  const matches = [];
+  for (const city of LOCATIONS) {
+    const cityMatches = !q || city.name.toLowerCase().includes(q);
+    const matchedDistricts = city.districts.filter(d => !q || d.toLowerCase().includes(q));
+    if (cityMatches || matchedDistricts.length) {
+      matches.push({ city, matchedDistricts: cityMatches ? city.districts : matchedDistricts, forceOpen: !!q });
+    }
+  }
+
+  if (!matches.length) {
+    container.innerHTML = '<div class="empty-state">Ничего не найдено</div>';
+    return;
+  }
+
+  for (const { city, matchedDistricts, forceOpen } of matches) {
+    const row = document.createElement('div');
+    row.className = 'row';
+    row.style.position = 'relative';
+
+    const cb = document.createElement('div');
+    cb.className = 'checkbox' + (isEnabled(city.name) ? ' checked' : '');
+    cb.innerHTML = checkmarkSvg();
+    cb.onclick = (e) => { e.stopPropagation(); toggle(city.name); cb.classList.toggle('checked', isEnabled(city.name)); };
+
+    const label = document.createElement('div');
+    label.className = 'row-label';
+    label.textContent = city.name;
+
+    row.appendChild(cb);
+    row.appendChild(label);
+
+    let districtsWrap = null;
+    if (city.districts.length) {
+      const arrow = document.createElement('div');
+      arrow.className = 'expand-arrow' + (forceOpen ? ' open' : '');
+      arrow.innerHTML = chevronSvg();
+      row.appendChild(arrow);
+
+      districtsWrap = document.createElement('div');
+      districtsWrap.className = 'districts-wrap' + (forceOpen ? ' open' : '');
+      for (const d of city.districts) {
+        if (q && !matchedDistricts.includes(d)) continue;
+        const drow = document.createElement('div');
+        drow.className = 'row district';
+        const dcb = document.createElement('div');
+        dcb.className = 'checkbox' + (isEnabled(d) ? ' checked' : '');
+        dcb.innerHTML = checkmarkSvg();
+        const dlabel = document.createElement('div');
+        dlabel.className = 'row-label';
+        dlabel.textContent = d;
+        drow.appendChild(dcb);
+        drow.appendChild(dlabel);
+        drow.onclick = () => { toggle(d); dcb.classList.toggle('checked', isEnabled(d)); };
+        districtsWrap.appendChild(drow);
+      }
+
+      row.onclick = () => {
+        const open = districtsWrap.classList.toggle('open');
+        arrow.classList.toggle('open', open);
+      };
+    }
+
+    container.appendChild(row);
+    if (districtsWrap) container.appendChild(districtsWrap);
+  }
+}
+
+document.getElementById('searchInput').addEventListener('input', (e) => {
+  document.getElementById('searchClear').style.display = e.target.value ? 'block' : 'none';
+  render(e.target.value);
+});
+document.getElementById('searchClear').addEventListener('click', () => {
+  const input = document.getElementById('searchInput');
+  input.value = '';
+  document.getElementById('searchClear').style.display = 'none';
+  render('');
+});
+
+document.getElementById('enableAllBtn').addEventListener('click', () => {
+  disabled.clear();
+  setDirty(true);
+  updateStatusLine();
+  render(document.getElementById('searchInput').value);
+});
+document.getElementById('disableAllBtn').addEventListener('click', () => {
+  for (const city of LOCATIONS) {
+    disabled.add(city.name);
+    for (const d of city.districts) disabled.add(d);
+  }
+  setDirty(true);
+  updateStatusLine();
+  render(document.getElementById('searchInput').value);
+});
+
+document.getElementById('saveBtn').addEventListener('click', async () => {
+  const btn = document.getElementById('saveBtn');
+  btn.disabled = true;
+  btn.textContent = 'Сохраняю…';
+  try {
+    const resp = await fetch(API_BASE + '/api/state', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        initData: tg ? tg.initData : '',
+        disabled: Array.from(disabled)
+      })
+    });
+    if (!resp.ok) throw new Error('save failed');
+    setDirty(false);
+    if (tg && tg.HapticFeedback) tg.HapticFeedback.notificationOccurred('success');
+  } catch (err) {
+    btn.textContent = 'Ошибка сохранения, попробуй ещё раз';
+    btn.disabled = false;
+    if (tg && tg.HapticFeedback) tg.HapticFeedback.notificationOccurred('error');
+  }
+});
+
+async function init() {
+  try {
+    const [locRes, stateRes] = await Promise.all([
+      fetch(API_BASE + '/locations.json'),
+      fetch(API_BASE + '/api/state?initData=' + encodeURIComponent(tg ? tg.initData : ''))
+    ]);
+    LOCATIONS = await locRes.json();
+    const state = await stateRes.json();
+    disabled = new Set(state.disabled || []);
+    updateStatusLine();
+    render('');
+  } catch (err) {
+    document.getElementById('listContainer').innerHTML =
+      '<div class="empty-state">Не удалось загрузить настройки.<br>Попробуй открыть заново.</div>';
+    document.getElementById('statusLine').textContent = 'Ошибка загрузки';
+  }
+}
+
+init();
+</script>
+</body>
+</html>
