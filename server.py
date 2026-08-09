@@ -29,6 +29,7 @@ BOT_TOKEN = os.environ["BOT_TOKEN"]
 UPSTASH_URL = os.environ["UPSTASH_REDIS_URL"].rstrip("/")
 UPSTASH_TOKEN = os.environ["UPSTASH_REDIS_TOKEN"]
 REDIS_KEY = "disabled_locations"
+REQUIRE_PRICE_KEY = "require_price"
 # Сколько секунд считаем initData ещё свежим (защита от повторной отправки
 # перехваченного старого запроса) — Telegram сам обновляет initData при
 # каждом открытии мини-аппа, так что запас в сутки более чем достаточен
@@ -84,11 +85,31 @@ async def redis_set_disabled(names):
         )
 
 
+async def redis_get_require_price():
+    async with httpx.AsyncClient() as client:
+        resp = await client.get(
+            f"{UPSTASH_URL}/get/{REQUIRE_PRICE_KEY}",
+            headers={"Authorization": f"Bearer {UPSTASH_TOKEN}"}
+        )
+        resp.raise_for_status()
+        val = resp.json().get("result")
+        return val == "1"
+
+
+async def redis_set_require_price(value: bool):
+    async with httpx.AsyncClient() as client:
+        await client.post(
+            f"{UPSTASH_URL}/set/{REQUIRE_PRICE_KEY}/{1 if value else 0}",
+            headers={"Authorization": f"Bearer {UPSTASH_TOKEN}"}
+        )
+
+
 @app.get("/api/state")
 async def get_state(initData: str = ""):
     verify_init_data(initData)
     disabled = await redis_get_disabled()
-    return JSONResponse({"disabled": disabled})
+    require_price = await redis_get_require_price()
+    return JSONResponse({"disabled": disabled, "requirePrice": require_price})
 
 
 @app.post("/api/state")
@@ -99,6 +120,8 @@ async def save_state(request: Request):
     if not isinstance(names, list):
         raise HTTPException(400, "disabled должен быть списком")
     await redis_set_disabled([str(n) for n in names])
+    if "requirePrice" in body:
+        await redis_set_require_price(bool(body["requirePrice"]))
     return JSONResponse({"ok": True})
 
 
