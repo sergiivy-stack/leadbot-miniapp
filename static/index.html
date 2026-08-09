@@ -185,6 +185,15 @@
 </header>
 
 <div class="card">
+  <div class="row" id="priceFilterRow" style="border-top: none;">
+    <div class="checkbox" id="priceFilterCheckbox">
+      <svg viewBox="0 0 13 13" fill="none"><path d="M2 6.5L5 9.5L11 3" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    </div>
+    <div class="row-label">Только объявления с ценой (для мэтчей)</div>
+  </div>
+</div>
+
+<div class="card">
   <div class="search-wrap">
     <div class="search-box">
       <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><circle cx="7" cy="7" r="5.5" stroke="currentColor" stroke-width="1.5"/><path d="M11 11L14.5 14.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
@@ -211,6 +220,7 @@ const API_BASE = ""; // тот же сервер, что отдал эту ст�
 
 let LOCATIONS = [];      // [{name, districts:[...]}]
 let disabled = new Set(); // выключенные названия (город или район)
+let requirePrice = false; // "только объявления с ценой" — общий переключатель, не по городам
 let dirty = false;
 
 function isEnabled(name) { return !disabled.has(name); }
@@ -221,6 +231,16 @@ function setDirty(v) {
   btn.disabled = !v;
   btn.textContent = v ? 'Сохранить изменения' : 'Сохранено';
 }
+
+function renderPriceFilter() {
+  document.getElementById('priceFilterCheckbox').classList.toggle('checked', requirePrice);
+}
+
+document.getElementById('priceFilterRow').addEventListener('click', () => {
+  requirePrice = !requirePrice;
+  renderPriceFilter();
+  setDirty(true);
+});
 
 function updateStatusLine() {
   let totalOn = 0, total = 0;
@@ -354,7 +374,8 @@ document.getElementById('saveBtn').addEventListener('click', async () => {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         initData: tg ? tg.initData : '',
-        disabled: Array.from(disabled)
+        disabled: Array.from(disabled),
+        requirePrice: requirePrice
       })
     });
     if (!resp.ok) throw new Error('save failed');
@@ -376,6 +397,8 @@ async function init() {
     LOCATIONS = await locRes.json();
     const state = await stateRes.json();
     disabled = new Set(state.disabled || []);
+    requirePrice = !!state.requirePrice;
+    renderPriceFilter();
     updateStatusLine();
     render('');
   } catch (err) {
