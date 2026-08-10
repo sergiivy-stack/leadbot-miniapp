@@ -30,6 +30,7 @@ UPSTASH_URL = os.environ["UPSTASH_REDIS_URL"].rstrip("/")
 UPSTASH_TOKEN = os.environ["UPSTASH_REDIS_TOKEN"]
 REDIS_KEY = "disabled_locations"
 REQUIRE_PRICE_KEY = "require_price"
+RENTAL_PERIOD_FILTER_KEY = "rental_period_filter"
 # Сколько секунд считаем initData ещё свежим (защита от повторной отправки
 # перехваченного старого запроса) — Telegram сам обновляет initData при
 # каждом открытии мини-аппа, так что запас в сутки более чем достаточен
@@ -104,12 +105,71 @@ async def redis_set_require_price(value: bool):
         )
 
 
+async def redis_get_rental_period_filter():
+    async with httpx.AsyncClient() as client:
+        resp = await client.get(
+            f"{UPSTASH_URL}/get/{RENTAL_PERIOD_FILTER_KEY}",
+            headers={"Authorization": f"Bearer {UPSTASH_TOKEN}"}
+        )
+        resp.raise_for_status()
+        val = resp.json().get("result")
+        return val if val in ("all", "monthly", "daily") else "all"
+
+
+async def redis_set_rental_period_filter(value: str):
+    if value not in ("all", "monthly", "daily"):
+        raise HTTPException(400, "rentalPeriodFilter должен быть 'all', 'monthly' или 'daily'")
+    async with httpx.AsyncClient() as client:
+        await client.post(
+            f"{UPSTASH_URL}/set/{RENTAL_PERIOD_FILTER_KEY}/{value}",
+            headers={"Authorization": f"Bearer {UPSTASH_TOKEN}"}
+        )
+
+
+PRICE_RANGE_KEYS = ("monthly_price_min", "monthly_price_max", "daily_price_min", "daily_price_max")
+
+
+async def redis_get_price_ranges():
+    result = {}
+    async with httpx.AsyncClient() as client:
+        for key in PRICE_RANGE_KEYS:
+            resp = await client.get(
+                f"{UPSTASH_URL}/get/{key}",
+                headers={"Authorization": f"Bearer {UPSTASH_TOKEN}"}
+            )
+            resp.raise_for_status()
+            val = resp.json().get("result")
+            result[key] = int(val) if val not in (None, "", "none") else None
+    return result
+
+
+async def redis_set_price_ranges(values: dict):
+    async with httpx.AsyncClient() as client:
+        for key in PRICE_RANGE_KEYS:
+            if key not in values:
+                continue
+            v = values[key]
+            if v is not None and not isinstance(v, int):
+                raise HTTPException(400, f"{key} должен быть числом или null")
+            await client.post(
+                f"{UPSTASH_URL}/set/{key}/{v if v is not None else 'none'}",
+                headers={"Authorization": f"Bearer {UPSTASH_TOKEN}"}
+            )
+
+
 @app.get("/api/state")
 async def get_state(initData: str = ""):
     verify_init_data(initData)
     disabled = await redis_get_disabled()
     require_price = await redis_get_require_price()
-    return JSONResponse({"disabled": disabled, "requirePrice": require_price})
+    rental_period_filter = await redis_get_rental_period_filter()
+    price_ranges = await redis_get_price_ranges()
+    return JSONResponse({
+        "disabled": disabled,
+        "requirePrice": require_price,
+        "rentalPeriodFilter": rental_period_filter,
+        "priceRanges": price_ranges,
+    })
 
 
 @app.post("/api/state")
@@ -122,6 +182,10 @@ async def save_state(request: Request):
     await redis_set_disabled([str(n) for n in names])
     if "requirePrice" in body:
         await redis_set_require_price(bool(body["requirePrice"]))
+    if "rentalPeriodFilter" in body:
+        await redis_set_rental_period_filter(str(body["rentalPeriodFilter"]))
+    if "priceRanges" in body and isinstance(body["priceRanges"], dict):
+        await redis_set_price_ranges(body["priceRanges"])
     return JSONResponse({"ok": True})
 
 
