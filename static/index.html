@@ -90,6 +90,63 @@
     font-family: inherit;
   }
 
+  .segmented {
+    display: flex;
+    background: var(--secondary-bg);
+    border-radius: 9px;
+    padding: 2px;
+    margin: 0 14px 14px;
+    gap: 2px;
+  }
+  .segmented-option {
+    flex: 1;
+    border: none;
+    background: none;
+    color: var(--text);
+    font-size: 13px;
+    font-weight: 500;
+    padding: 7px 4px;
+    border-radius: 7px;
+    font-family: inherit;
+  }
+  .segmented-option.active {
+    background: var(--section-bg);
+    color: var(--link);
+    box-shadow: 0 1px 2px rgba(0,0,0,0.08);
+  }
+  .segmented-label {
+    padding: 12px 14px 0;
+    font-size: 13px;
+    color: var(--hint);
+  }
+
+  .range-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 14px 4px;
+  }
+  .range-row:last-of-type { padding-bottom: 14px; }
+  .range-label {
+    font-size: 13px;
+    color: var(--hint);
+    width: 76px;
+    flex-shrink: 0;
+  }
+  .range-input {
+    flex: 1;
+    min-width: 0;
+    background: var(--secondary-bg);
+    border: none;
+    border-radius: 8px;
+    padding: 8px 10px;
+    font-size: 15px;
+    color: var(--text);
+    font-family: inherit;
+  }
+  .range-input::placeholder { color: var(--hint); }
+  .range-sep { color: var(--hint); font-size: 13px; }
+
   .row {
     display: flex;
     align-items: center;
@@ -191,6 +248,25 @@
     </div>
     <div class="row-label">Только объявления с ценой (для мэтчей)</div>
   </div>
+  <div class="segmented-label">Тип аренды в мэтчах</div>
+  <div class="segmented" id="periodFilterSegmented">
+    <button class="segmented-option" data-value="all">Все</button>
+    <button class="segmented-option" data-value="monthly">Помесячно</button>
+    <button class="segmented-option" data-value="daily">Посуточно</button>
+  </div>
+  <div class="segmented-label">Диапазон цены (€) в мэтчах</div>
+  <div class="range-row">
+    <div class="range-label">Месячная</div>
+    <input class="range-input" type="number" inputmode="numeric" id="monthlyMinInput" placeholder="от">
+    <div class="range-sep">—</div>
+    <input class="range-input" type="number" inputmode="numeric" id="monthlyMaxInput" placeholder="до">
+  </div>
+  <div class="range-row">
+    <div class="range-label">Посуточная</div>
+    <input class="range-input" type="number" inputmode="numeric" id="dailyMinInput" placeholder="от">
+    <div class="range-sep">—</div>
+    <input class="range-input" type="number" inputmode="numeric" id="dailyMaxInput" placeholder="до">
+  </div>
 </div>
 
 <div class="card">
@@ -221,6 +297,8 @@ const API_BASE = ""; // тот же сервер, что отдал эту ст�
 let LOCATIONS = [];      // [{name, districts:[...]}]
 let disabled = new Set(); // выключенные названия (город или район)
 let requirePrice = false; // "только объявления с ценой" — общий переключатель, не по городам
+let rentalPeriodFilter = 'all'; // 'all' | 'monthly' | 'daily' — тип аренды в мэтчах
+let priceRanges = { monthly_price_min: null, monthly_price_max: null, daily_price_min: null, daily_price_max: null };
 let dirty = false;
 
 function isEnabled(name) { return !disabled.has(name); }
@@ -236,10 +314,44 @@ function renderPriceFilter() {
   document.getElementById('priceFilterCheckbox').classList.toggle('checked', requirePrice);
 }
 
+const RANGE_INPUT_IDS = {
+  monthly_price_min: 'monthlyMinInput', monthly_price_max: 'monthlyMaxInput',
+  daily_price_min: 'dailyMinInput', daily_price_max: 'dailyMaxInput'
+};
+
+function renderPriceRanges() {
+  for (const key in RANGE_INPUT_IDS) {
+    const el = document.getElementById(RANGE_INPUT_IDS[key]);
+    el.value = priceRanges[key] === null || priceRanges[key] === undefined ? '' : priceRanges[key];
+  }
+}
+
+for (const key in RANGE_INPUT_IDS) {
+  document.getElementById(RANGE_INPUT_IDS[key]).addEventListener('input', (e) => {
+    const raw = e.target.value.trim();
+    priceRanges[key] = raw === '' ? null : Math.max(0, parseInt(raw, 10) || 0);
+    setDirty(true);
+  });
+}
+
 document.getElementById('priceFilterRow').addEventListener('click', () => {
   requirePrice = !requirePrice;
   renderPriceFilter();
   setDirty(true);
+});
+
+function renderPeriodFilter() {
+  document.querySelectorAll('#periodFilterSegmented .segmented-option').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.value === rentalPeriodFilter);
+  });
+}
+
+document.querySelectorAll('#periodFilterSegmented .segmented-option').forEach(btn => {
+  btn.addEventListener('click', () => {
+    rentalPeriodFilter = btn.dataset.value;
+    renderPeriodFilter();
+    setDirty(true);
+  });
 });
 
 function updateStatusLine() {
@@ -375,7 +487,9 @@ document.getElementById('saveBtn').addEventListener('click', async () => {
       body: JSON.stringify({
         initData: tg ? tg.initData : '',
         disabled: Array.from(disabled),
-        requirePrice: requirePrice
+        requirePrice: requirePrice,
+        rentalPeriodFilter: rentalPeriodFilter,
+        priceRanges: priceRanges
       })
     });
     if (!resp.ok) throw new Error('save failed');
@@ -398,7 +512,11 @@ async function init() {
     const state = await stateRes.json();
     disabled = new Set(state.disabled || []);
     requirePrice = !!state.requirePrice;
+    rentalPeriodFilter = state.rentalPeriodFilter || 'all';
+    priceRanges = Object.assign(priceRanges, state.priceRanges || {});
     renderPriceFilter();
+    renderPeriodFilter();
+    renderPriceRanges();
     updateStatusLine();
     render('');
   } catch (err) {
